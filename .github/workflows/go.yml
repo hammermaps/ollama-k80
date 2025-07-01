@@ -24,6 +24,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Patch CMakeLists.txt to remove unsupported install commands
+        run: |
+          sed -i '/RUNTIME_DEPENDENCIES/,+5 d' CMakeLists.txt
+
+      - name: Disable CUDA and HIP in CMakeLists
+        run: |
+          echo -e '\nif(CMAKE_CROSSCOMPILING)\n  set(GGML_CUDA OFF)\n  set(GGML_HIP OFF)\nendif()' >> CMakeLists.txt
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
