@@ -1,0 +1,70 @@
+name: Build ollama-k80 with CMake and Go
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows]
+        goarch: [amd64]
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+
+    env:
+      CGO_ENABLED: 1
+      GO111MODULE: on
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install Build Tools
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential cmake ninja-build
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            sudo apt install -y mingw-w64
+          fi
+
+      - name: Configure and build C/C++ with CMake
+        run: |
+          mkdir -p build_cmake
+          cd build_cmake
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            cmake .. \
+              -DCMAKE_SYSTEM_NAME=Windows \
+              -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+              -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+              -DCMAKE_BUILD_TYPE=Release \
+              -G Ninja
+          else
+            cmake .. -DCMAKE_BUILD_TYPE=Release -G Ninja
+          fi
+          cmake --build . --config Release
+
+      - name: Build Go Project
+        run: |
+          mkdir -p build/${{ matrix.goos }}-${{ matrix.goarch }}
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -v -o build/${{ matrix.goos }}-${{ matrix.goarch }}/ollama-k80 ./cmd/ollama
+
+      - name: Upload Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-k80-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/${{ matrix.goos }}-${{ matrix.goarch }}
+
+      - name: Copy native libs to output
+        run: |
+          cp build_cmake/lib/ollama/* build/${{ matrix.goos }}-${{ matrix.goarch }}/ || true
+
